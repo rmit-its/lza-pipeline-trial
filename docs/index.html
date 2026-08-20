@@ -21,14 +21,8 @@
       padding-bottom: 16px;
       border-bottom: 1px solid #21262d;
     }
-    .header h1 {
-      font-size: 24px;
-      color: #f0f6fc;
-    }
-    .header .refresh {
-      color: #8b949e;
-      font-size: 13px;
-    }
+    .header h1 { font-size: 24px; color: #f0f6fc; }
+    .header .refresh { color: #8b949e; font-size: 13px; }
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -63,6 +57,8 @@
     .item .icon { font-size: 18px; margin-right: 12px; flex-shrink: 0; }
     .item .content { flex: 1; }
     .item .title { font-size: 14px; color: #f0f6fc; font-weight: 500; }
+    .item .title a { color: #58a6ff; text-decoration: none; }
+    .item .title a:hover { text-decoration: underline; }
     .item .meta { font-size: 12px; color: #8b949e; margin-top: 2px; }
     .item .badge {
       font-size: 11px;
@@ -88,7 +84,11 @@
     .env-item .env-status { font-size: 24px; margin: 8px 0 4px; }
     .env-item .env-label { font-size: 12px; color: #c9d1d9; }
     .empty { color: #484f58; font-style: italic; padding: 12px; font-size: 13px; }
-    .position { display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; border-radius: 50%; background: #21262d; color: #8b949e; font-size: 11px; font-weight: bold; margin-right: 10px; }
+    .position {
+      display: inline-block; width: 24px; height: 24px; line-height: 24px;
+      text-align: center; border-radius: 50%; background: #21262d;
+      color: #8b949e; font-size: 11px; font-weight: bold; margin-right: 10px;
+    }
   </style>
 </head>
 <body>
@@ -98,23 +98,16 @@
   </div>
 
   <div class="grid">
-    <!-- Merge Queue -->
     <div class="card">
       <h2>Merge Queue</h2>
-      <div id="queue-items">
-        <div class="empty">Loading...</div>
-      </div>
+      <div id="queue-items"><div class="empty">Loading...</div></div>
     </div>
 
-    <!-- Currently Executing -->
     <div class="card">
       <h2>Currently Executing</h2>
-      <div id="executing-items">
-        <div class="empty">Loading...</div>
-      </div>
+      <div id="executing-items"><div class="empty">Loading...</div></div>
     </div>
 
-    <!-- Onboarding Status -->
     <div class="card">
       <h2>Onboarding Dispatch</h2>
       <div class="env-grid" id="onboard-status">
@@ -124,37 +117,20 @@
       </div>
     </div>
 
-    <!-- Recent PRs -->
     <div class="card">
       <h2>Pending PRs</h2>
-      <div id="pending-prs">
-        <div class="empty">Loading...</div>
-      </div>
+      <div id="pending-prs"><div class="empty">Loading...</div></div>
     </div>
 
-    <!-- Deploy History -->
     <div class="card full-width">
       <h2>Recent Deploys</h2>
-      <div id="deploy-history">
-        <div class="empty">Loading...</div>
-      </div>
+      <div id="deploy-history"><div class="empty">Loading...</div></div>
     </div>
   </div>
 
   <script>
-    const REPO = 'rmit-its/lza-pipeline-trial';
-    const API = 'https://api.github.com';
-
-    // Try to load token from URL param for demo, otherwise uses unauthenticated (60 req/hr)
-    const params = new URLSearchParams(window.location.search);
-    const TOKEN = params.get('token') || '';
-    const headers = TOKEN ? { 'Authorization': `token ${TOKEN}` } : {};
-
-    async function fetchJSON(url) {
-      const res = await fetch(url, { headers });
-      if (!res.ok) return null;
-      return res.json();
-    }
+    // Dashboard reads from pre-generated JSON files (updated by GitHub Actions workflow)
+    const BASE = '.';
 
     function timeAgo(date) {
       const seconds = Math.floor((new Date() - new Date(date)) / 1000);
@@ -164,152 +140,136 @@
       return `${Math.floor(seconds/86400)}d ago`;
     }
 
-    function badge(status) {
-      const map = {
-        'in_progress': ['running', 'Running'],
-        'queued': ['queued', 'Queued'],
-        'waiting': ['waiting', 'Waiting'],
-        'completed_success': ['success', 'Passed'],
-        'completed_failure': ['failed', 'Failed'],
-        'success': ['success', 'Passed'],
-        'failure': ['failed', 'Failed'],
-        'idle': ['success', 'Idle'],
-      };
-      const [cls, label] = map[status] || ['queued', status];
-      return `<span class="badge badge-${cls}">${label}</span>`;
+    function badge(conclusion, status) {
+      if (status === 'in_progress') return '<span class="badge badge-running">Running</span>';
+      if (status === 'queued' || status === 'waiting') return '<span class="badge badge-queued">Queued</span>';
+      if (conclusion === 'success') return '<span class="badge badge-success">Passed</span>';
+      if (conclusion === 'failure') return '<span class="badge badge-failed">Failed</span>';
+      return '<span class="badge badge-waiting">Pending</span>';
+    }
+
+    async function fetchJSON(file) {
+      try {
+        const res = await fetch(`${BASE}/${file}?_=${Date.now()}`);
+        if (!res.ok) return null;
+        return res.json();
+      } catch { return null; }
     }
 
     async function loadQueue() {
-      // Check for merge group runs (these are queue entries)
-      const runs = await fetchJSON(`${API}/repos/${REPO}/actions/runs?event=merge_group&per_page=10`);
-      const container = document.getElementById('queue-items');
-
-      if (!runs || !runs.workflow_runs || runs.workflow_runs.length === 0) {
-        container.innerHTML = '<div class="empty">Queue is empty — no PRs waiting</div>';
+      const data = await fetchJSON('queue.json');
+      const el = document.getElementById('queue-items');
+      if (!data || data.length === 0) {
+        el.innerHTML = '<div class="empty">Queue is empty - no PRs waiting</div>';
         return;
       }
-
-      const active = runs.workflow_runs.filter(r => r.status !== 'completed');
+      const active = data.filter(r => r.status !== 'completed');
       if (active.length === 0) {
-        container.innerHTML = '<div class="empty">Queue is empty — no PRs waiting</div>';
+        el.innerHTML = '<div class="empty">Queue is empty - no PRs waiting</div>';
         return;
       }
-
-      container.innerHTML = active.map((r, i) => `
+      el.innerHTML = active.map((r, i) => `
         <div class="item">
           <span class="position">${i + 1}</span>
           <div class="content">
-            <div class="title">${r.display_title}</div>
-            <div class="meta">${timeAgo(r.created_at)} · ${r.head_branch}</div>
+            <div class="title"><a href="${r.htmlUrl}" target="_blank">${r.displayTitle}</a></div>
+            <div class="meta">${timeAgo(r.createdAt)} · ${r.headBranch || ''}</div>
           </div>
-          ${badge(r.status)}
+          ${badge(r.conclusion, r.status)}
         </div>
       `).join('');
     }
 
     async function loadExecuting() {
-      // All currently running workflows
-      const runs = await fetchJSON(`${API}/repos/${REPO}/actions/runs?status=in_progress&per_page=10`);
-      const container = document.getElementById('executing-items');
-
-      if (!runs || !runs.workflow_runs || runs.workflow_runs.length === 0) {
-        container.innerHTML = '<div class="empty">Nothing executing right now</div>';
+      const data = await fetchJSON('executing.json');
+      const el = document.getElementById('executing-items');
+      if (!data || data.length === 0) {
+        el.innerHTML = '<div class="empty">Nothing executing right now</div>';
         return;
       }
-
-      container.innerHTML = runs.workflow_runs.map(r => `
-        <div class="item">
-          <div class="icon">${r.event === 'workflow_dispatch' ? '🚀' : r.event === 'push' ? '📦' : '🔄'}</div>
-          <div class="content">
-            <div class="title">${r.display_title}</div>
-            <div class="meta">${r.name} · ${timeAgo(r.created_at)}</div>
-          </div>
-          ${badge('in_progress')}
-        </div>
-      `).join('');
-    }
-
-    async function loadOnboarding() {
-      // Last dispatch run per environment
-      const runs = await fetchJSON(`${API}/repos/${REPO}/actions/workflows/lza-onboard.yml/runs?per_page=15`);
-      const container = document.getElementById('onboard-status');
-
-      const envStatus = { dev: null, uat: null, prd: null };
-
-      if (runs && runs.workflow_runs) {
-        for (const run of runs.workflow_runs) {
-          const env = run.display_title.match(/LZA Onboard - (dev|uat|prd)/)?.[1];
-          if (env && !envStatus[env]) {
-            envStatus[env] = run;
-          }
-        }
-      }
-
-      container.innerHTML = Object.entries(envStatus).map(([env, run]) => {
-        if (!run) return `<div class="env-item"><div class="env-name">${env}</div><div class="env-status">➖</div><div class="env-label">No runs</div></div>`;
-        const icon = run.conclusion === 'success' ? '✅' : run.conclusion === 'failure' ? '❌' : run.status === 'in_progress' ? '🔄' : '⏳';
-        const label = run.conclusion || run.status;
-        return `<div class="env-item"><div class="env-name">${env}</div><div class="env-status">${icon}</div><div class="env-label">${label} · ${timeAgo(run.created_at)}</div></div>`;
-      }).join('');
-    }
-
-    async function loadPendingPRs() {
-      const prs = await fetchJSON(`${API}/repos/${REPO}/pulls?state=open&per_page=10`);
-      const container = document.getElementById('pending-prs');
-
-      if (!prs || prs.length === 0) {
-        container.innerHTML = '<div class="empty">No open PRs</div>';
-        return;
-      }
-
-      container.innerHTML = prs.map(pr => {
-        const hasApproval = pr.labels?.some(l => l.name === 'approved');
-        return `
-        <div class="item">
-          <div class="icon">📝</div>
-          <div class="content">
-            <div class="title">#${pr.number} ${pr.title}</div>
-            <div class="meta">by ${pr.user.login} · ${timeAgo(pr.created_at)}</div>
-          </div>
-          ${badge(hasApproval ? 'completed_success' : 'waiting')}
-        </div>`;
-      }).join('');
-    }
-
-    async function loadDeploys() {
-      // Recent push-to-main deploy runs
-      const runs = await fetchJSON(`${API}/repos/${REPO}/actions/workflows/lza-deploy.yml/runs?per_page=10`);
-      const container = document.getElementById('deploy-history');
-
-      if (!runs || !runs.workflow_runs || runs.workflow_runs.length === 0) {
-        container.innerHTML = '<div class="empty">No deploys yet</div>';
-        return;
-      }
-
-      container.innerHTML = runs.workflow_runs.slice(0, 8).map(r => {
-        const icon = r.conclusion === 'success' ? '✅' : r.conclusion === 'failure' ? '❌' : '🔄';
-        const status = r.conclusion === 'success' ? 'completed_success' : r.conclusion === 'failure' ? 'completed_failure' : 'in_progress';
+      el.innerHTML = data.map(r => {
+        const icon = r.event === 'workflow_dispatch' ? '🚀' : r.event === 'push' ? '📦' : r.event === 'merge_group' ? '🔀' : '🔄';
         return `
         <div class="item">
           <div class="icon">${icon}</div>
           <div class="content">
-            <div class="title">${r.display_title}</div>
-            <div class="meta">${new Date(r.created_at).toLocaleString()} · ${r.run_number ? '#' + r.run_number : ''}</div>
+            <div class="title"><a href="${r.htmlUrl}" target="_blank">${r.displayTitle}</a></div>
+            <div class="meta">${r.name} · ${timeAgo(r.createdAt)}</div>
           </div>
-          ${badge(status)}
+          ${badge(null, 'in_progress')}
         </div>`;
       }).join('');
     }
 
+    async function loadOnboarding() {
+      const data = await fetchJSON('onboard.json');
+      const el = document.getElementById('onboard-status');
+      const envStatus = { dev: null, uat: null, prd: null };
+
+      if (data) {
+        for (const run of data) {
+          const match = run.displayTitle.match(/LZA Onboard - (dev|uat|prd)/);
+          if (match && !envStatus[match[1]]) envStatus[match[1]] = run;
+        }
+      }
+
+      el.innerHTML = Object.entries(envStatus).map(([env, run]) => {
+        if (!run) return `<div class="env-item"><div class="env-name">${env}</div><div class="env-status">➖</div><div class="env-label">No runs</div></div>`;
+        const icon = run.conclusion === 'success' ? '✅' : run.conclusion === 'failure' ? '❌' : run.status === 'in_progress' ? '🔄' : '⏳';
+        const label = run.conclusion || run.status;
+        return `<div class="env-item"><div class="env-name">${env}</div><div class="env-status">${icon}</div><div class="env-label">${label} · ${timeAgo(run.createdAt)}</div></div>`;
+      }).join('');
+    }
+
+    async function loadPRs() {
+      const data = await fetchJSON('prs.json');
+      const el = document.getElementById('pending-prs');
+      if (!data || data.length === 0) {
+        el.innerHTML = '<div class="empty">No open PRs</div>';
+        return;
+      }
+      el.innerHTML = data.map(pr => `
+        <div class="item">
+          <div class="icon">📝</div>
+          <div class="content">
+            <div class="title">#${pr.number} ${pr.title}</div>
+            <div class="meta">by ${pr.author.login} · ${timeAgo(pr.createdAt)} · ${pr.headRefName}</div>
+          </div>
+          <span class="badge badge-waiting">Open</span>
+        </div>
+      `).join('');
+    }
+
+    async function loadDeploys() {
+      const data = await fetchJSON('deploys.json');
+      const el = document.getElementById('deploy-history');
+      if (!data || data.length === 0) {
+        el.innerHTML = '<div class="empty">No deploys yet</div>';
+        return;
+      }
+      el.innerHTML = data.map(r => {
+        const icon = r.conclusion === 'success' ? '✅' : r.conclusion === 'failure' ? '❌' : '🔄';
+        return `
+        <div class="item">
+          <div class="icon">${icon}</div>
+          <div class="content">
+            <div class="title"><a href="${r.htmlUrl}" target="_blank">${r.displayTitle}</a></div>
+            <div class="meta">${new Date(r.createdAt).toLocaleString()} · #${r.runNumber || ''}</div>
+          </div>
+          ${badge(r.conclusion, r.status)}
+        </div>`;
+      }).join('');
+    }
+
+    async function loadMeta() {
+      const data = await fetchJSON('meta.json');
+      if (data) {
+        document.getElementById('lastUpdated').textContent = `Data updated: ${timeAgo(data.updated)} · Refreshes every 5 min`;
+      }
+    }
+
     async function refresh() {
-      await Promise.all([
-        loadQueue(),
-        loadExecuting(),
-        loadOnboarding(),
-        loadPendingPRs(),
-        loadDeploys(),
-      ]);
-      document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()} · Refreshes every 30s`;
+      await Promise.all([loadQueue(), loadExecuting(), loadOnboarding(), loadPRs(), loadDeploys(), loadMeta()]);
     }
 
     refresh();

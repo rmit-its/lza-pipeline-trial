@@ -1,0 +1,68 @@
+name: Update Dashboard Data
+
+on:
+  # Update on every workflow completion
+  workflow_run:
+    workflows: ["CI - LZA Config Validation", "LZA Deploy", "LZA Onboard"]
+    types: [completed]
+  # Update when PRs change
+  pull_request:
+    types: [opened, closed, synchronize, labeled]
+  # Manual trigger
+  workflow_dispatch:
+  # Periodic refresh
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: write
+  actions: read
+  pull-requests: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Generate dashboard data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p docs
+
+          # Fetch open PRs
+          gh pr list --repo rmit-its/lza-pipeline-trial --state open --json number,title,author,createdAt,headRefName,labels \
+            > docs/prs.json
+
+          # Fetch recent deploy runs
+          gh run list --repo rmit-its/lza-pipeline-trial --workflow "LZA Deploy" --limit 10 --json databaseId,displayTitle,conclusion,status,createdAt,runNumber,htmlUrl \
+            > docs/deploys.json
+
+          # Fetch onboarding runs
+          gh run list --repo rmit-its/lza-pipeline-trial --workflow "LZA Onboard" --limit 15 --json databaseId,displayTitle,conclusion,status,createdAt,htmlUrl \
+            > docs/onboard.json
+
+          # Fetch currently running workflows
+          gh run list --repo rmit-its/lza-pipeline-trial --status in_progress --json databaseId,displayTitle,name,status,createdAt,event,htmlUrl \
+            > docs/executing.json
+
+          # Fetch merge group runs (queue entries)
+          gh run list --repo rmit-its/lza-pipeline-trial --event merge_group --limit 10 --json databaseId,displayTitle,conclusion,status,createdAt,headBranch,htmlUrl \
+            > docs/queue.json
+
+          # Write timestamp
+          echo "{\"updated\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > docs/meta.json
+
+      - name: Commit and push
+        run: |
+          cd docs
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add prs.json deploys.json onboard.json executing.json queue.json meta.json
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "chore: update dashboard data [skip ci]"
+          git push
