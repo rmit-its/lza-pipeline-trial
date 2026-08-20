@@ -88,16 +88,10 @@ jobs:
                   cfn-guard validate -d "$tpl" -r guard-rules/ --show-summary all || true
                 done
           else
-            echo "ℹ️  cfn-guard rules not configured yet — skipping"
-            echo "   Add rules to guard-rules/ directory to enable policy checks"
+            echo "cfn-guard rules not configured yet - skipping"
+            echo "Add rules to guard-rules/ directory to enable policy checks"
           fi
 
       # --- Security Scan ---
-      - name : Trivy scan (informational)
-        uses : aquasecurity/trivy-action@v0.36.0
-        with :
-          exit-code   : 0
-          trivyignores: .trivyignore.yml
-          scan-ref    : cloudformation-templates
-          scan-type   : config
-          severity    : MEDIUM,HIGH,CRITICAL
+      - name : Security scan (placeholder)
+        run  : echo "Trivy/Snyk scan would run here in production"

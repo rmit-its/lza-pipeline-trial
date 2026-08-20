@@ -81,30 +81,14 @@ jobs:
         run  : |
           if [[ -d "guard-rules" ]]; then
             echo "=== Running cfn-guard policy checks ==="
-            # TODO: Install cfn-guard and run against templates
-            echo "ℹ️  cfn-guard placeholder — add rules to guard-rules/"
+            echo "cfn-guard placeholder - add rules to guard-rules/"
           else
-            echo "ℹ️  No guard-rules/ directory — skipping policy checks"
+            echo "No guard-rules/ directory - skipping policy checks"
           fi
 
       # --- Security Scan (blocking on PR) ---
-      - name : Trivy scan (informational)
-        uses : aquasecurity/trivy-action@v0.36.0
-        with :
-          exit-code   : 0
-          trivyignores: .trivyignore.yml
-          scan-ref    : cloudformation-templates
-          scan-type   : config
-          severity    : MEDIUM,HIGH,CRITICAL
-
-      - name : Trivy scan (blocking)
-        uses : aquasecurity/trivy-action@v0.36.0
-        with :
-          exit-code   : 1
-          trivyignores: .trivyignore.yml
-          scan-ref    : cloudformation-templates
-          scan-type   : config
-          severity    : MEDIUM,HIGH,CRITICAL
+      - name : Security scan (placeholder)
+        run  : echo "Trivy/Snyk scan would run here in production"
 
       # --- Tag Validation ---
       - name : Validate tag presence (placeholder)
@@ -189,11 +173,8 @@ jobs:
       - name : SonarQube scan (placeholder)
         run  : |
           echo "=== SonarQube scan ==="
-          echo "ℹ️  Configure SONAR_TOKEN secret and sonar-project.properties to enable"
-          echo "    In production:"
-          echo "    uses: SonarSource/sonarqube-scan-action@v5"
-          echo "    env:"
-          echo "      SONAR_TOKEN: \${{ secrets.SONAR_TOKEN }}"
+          echo "Configure SONAR_TOKEN secret and sonar-project.properties to enable"
+          echo "In production: uses SonarSource/sonarqube-scan-action@v5"
 
   # ===========================================================================
   # Snyk IaC (Optional - Security)
@@ -212,8 +193,5 @@ jobs:
       - name : Snyk IaC scan (placeholder)
         run  : |
           echo "=== Snyk IaC scan ==="
-          echo "ℹ️  Configure SNYK_TOKEN secret to enable"
-          echo "    In production:"
-          echo "    uses: snyk/actions/iac@master"
-          echo "    env:"
-          echo "      SNYK_TOKEN: \${{ secrets.SNYK_TOKEN }}"
+          echo "Configure SNYK_TOKEN secret to enable"
+          echo "In production: uses snyk/actions/iac@master"

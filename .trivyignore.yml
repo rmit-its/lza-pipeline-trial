@@ -1,2 +1,7 @@
-# Trivy findings to ignore
-# Format: AVD-ID or CVE-ID
+misconfigurations:
+  # AWS-0132 (HIGH): Bucket does not encrypt data with a customer managed key.
+  # Trial repo sample template - CMK not required for demonstration
+  - id: AVD-AWS-0132
+    paths:
+      - "sample-template.yml"
+    statement: Trial repo - sample template does not require CMK encryption
