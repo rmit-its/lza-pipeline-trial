@@ -9,7 +9,7 @@ Resources:
       Description: Prevents S3 buckets from being made public in workload accounts
       Type: SERVICE_CONTROL_POLICY
       TargetIds:
-        - ou-workloads
+        - ou-abc1-12345678
       Content:
         Version: "2012-10-17"
         Statement:
