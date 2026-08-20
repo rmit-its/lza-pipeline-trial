@@ -88,8 +88,8 @@ jobs:
                   cfn-guard validate -d "$tpl" -r guard-rules/ --show-summary all || true
                 done
           else
-            echo "ℹ️  cfn-guard rules not configured yet — skipping"
-            echo "   Add rules to guard-rules/ directory to enable policy checks"
+            echo "cfn-guard rules not configured yet - skipping"
+            echo "Add rules to guard-rules/ directory to enable policy checks"
           fi
 
       # --- Security Scan ---
