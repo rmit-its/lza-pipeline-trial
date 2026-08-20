@@ -1,0 +1,98 @@
+name    : LZA Deploy
+run-name: LZA Deploy - prd
+
+# =============================================================================
+# Deploy LZA Config on Merge to Main
+#
+# Triggers:
+#   push to main -> Fetch prd config -> Validate -> Zip -> Upload S3
+#
+# Runs AFTER a PR has been merged (via merge queue or direct merge).
+# Static analysis is NOT repeated — it already passed on the PR.
+#
+# The LZA CodePipeline in the management account watches the S3 location
+# and automatically processes the uploaded config zip.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  cancel-in-progress: false
+  group: lza-deploy-prd
+
+jobs:
+
+  # ===========================================================================
+  # Fetch + Validate + Upload
+  # ===========================================================================
+  fetch-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Fetch LZA config
+        uses : ./.github/actions/fetch-config
+        with :
+          environment: prd
+
+  validate-config:
+    needs  : fetch-config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Validate LZA config
+        uses : ./.github/actions/validate-config
+        with :
+          environment: prd
+          create-zip : "true"
+
+  upload-config:
+    needs  : validate-config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Upload config to S3
+        uses : ./.github/actions/upload-s3
+        with :
+          environment: prd
+
+  # ===========================================================================
+  # Deploy Lambda Code (path-filtered)
+  # ===========================================================================
+  deploy-lambda:
+    needs  : validate-config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name : Detect lambda code changes
+        id   : paths
+        uses : dorny/paths-filter@v3
+        with :
+          filters: |
+            lambda:
+              - 'cloudformation-templates/lambda-code/**'
+
+      - name : Deploy Lambda code to S3 (mock)
+        if   : steps.paths.outputs.lambda == 'true'
+        run  : |
+          echo "=== Mock: Deploying Lambda code to S3 ==="
+          sleep 1
+          echo "✓ Lambda code deployed"
+
+      - name : Skip Lambda deploy (no changes)
+        if   : steps.paths.outputs.lambda != 'true'
+        run  : echo "No lambda code changes detected — skipping deploy"

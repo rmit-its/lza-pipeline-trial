@@ -1,0 +1,113 @@
+name    : LZA Onboard
+run-name: >-
+  LZA Onboard - ${{ inputs.environment }} -
+  ${{ inputs.triggered_by || 'manual' }} -
+  ${{ inputs.workflow_id || '' }}
+
+# =============================================================================
+# App Onboarding Dispatch (Per-Environment Isolation)
+#
+# Triggers:
+#   workflow_dispatch -> App-onboarding Lambda or manual from Actions tab
+#
+# Each environment gets its own concurrency group — a dev failure does NOT
+# block uat or prd dispatches.
+#
+# Behaviour:
+#   dev  -> Fetch from dev DDB  -> Validate -> done (no S3 upload)
+#   uat  -> Fetch from uat DDB  -> Validate -> done (no S3 upload)
+#   prd  -> Fetch from prd DDB  -> Validate -> Upload to S3
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        default    : dev
+        description: Target environment
+        required   : true
+        type       : choice
+        options:
+          - dev
+          - uat
+          - prd
+      workflow_id:
+        description: Correlation ID from onboarding workflow
+        required   : false
+        type       : string
+      triggered_by:
+        description: App-onboarding environment that triggered this workflow
+        required   : false
+        type       : string
+
+permissions:
+  contents: read
+
+# =============================================================================
+# Per-environment concurrency isolation
+#   - lza-onboard-dev
+#   - lza-onboard-uat
+#   - lza-onboard-prd
+# =============================================================================
+concurrency:
+  cancel-in-progress: false
+  group: lza-onboard-${{ inputs.environment }}
+
+jobs:
+
+  # ===========================================================================
+  # Fetch Config
+  # ===========================================================================
+  fetch-config:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_config: ${{ steps.decide.outputs.upload_config }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Decide upload behaviour
+        id   : decide
+        run  : |
+          if [[ "${{ inputs.environment }}" == "prd" ]]; then
+            echo "upload_config=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload_config=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name : Fetch LZA config
+        uses : ./.github/actions/fetch-config
+        with :
+          environment: ${{ inputs.environment }}
+
+  # ===========================================================================
+  # Validate Config
+  # ===========================================================================
+  validate-config:
+    needs  : fetch-config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Validate LZA config
+        uses : ./.github/actions/validate-config
+        with :
+          environment: ${{ inputs.environment }}
+          create-zip : ${{ needs.fetch-config.outputs.upload_config }}
+
+  # ===========================================================================
+  # Upload to S3 (prd only)
+  # ===========================================================================
+  upload-config:
+    if     : needs.fetch-config.outputs.upload_config == 'true'
+    needs  : [fetch-config, validate-config]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Upload config to S3
+        uses : ./.github/actions/upload-s3
+        with :
+          environment: ${{ inputs.environment }}

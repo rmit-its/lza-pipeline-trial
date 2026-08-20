@@ -1,0 +1,219 @@
+name    : CI - LZA Config Validation
+run-name: >-
+  CI -
+  ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.pull_request.number) ||
+      'Merge Queue' }}
+
+# =============================================================================
+# PR + Merge Queue Validation (Full)
+#
+# Triggers:
+#   pull_request -> Full static analysis + config validation + unit tests
+#   merge_group  -> Same checks on merge group branch (gate for merge queue)
+#
+# This is the thorough validation that must pass before merge.
+# Developers get fast feedback from ci-push.yml on every push;
+# this workflow runs the expensive checks only when they're ready to merge.
+#
+# Jobs:
+#   static-analysis   - cfn-lint, cfn-guard, Trivy (blocking), tag validation
+#   unit-tests        - pytest on support scripts
+#   config-validation - DDB fetch + LZA validator (schema check)
+#   sonar             - SonarQube code quality (Python scripts)
+# =============================================================================
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+concurrency:
+  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.head.ref || github.ref }}
+
+jobs:
+
+  # ===========================================================================
+  # Static Analysis
+  # ===========================================================================
+  # CFN lint, cfn-guard policies, Trivy (blocking), and tag validation.
+  # ===========================================================================
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Set up Python
+        uses : actions/setup-python@v5
+        with :
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache         : pip
+          cache-dependency-path: support-scripts/pyscripts/requirements.txt
+
+      - name : Install dependencies
+        run  : |
+          pip install --quiet \
+            -r support-scripts/pyscripts/requirements.txt \
+            cfn-lint
+
+      # --- CFN Lint ---
+      - name : Lint CloudFormation templates
+        run  : |
+          TEMPLATES=$( find cloudformation-templates -type f \( -name '*.yml' -o -name '*.yaml' \) \
+                       | xargs grep -l AWSTemplateFormatVersion 2>/dev/null || true )
+          if [[ -n "$TEMPLATES" ]]; then
+            cfn-lint --format pretty --non-zero-exit-code error $TEMPLATES
+          else
+            echo "No CloudFormation templates found — skipping"
+          fi
+
+      # --- CFN Guard (policy-as-code) ---
+      - name : Run cfn-guard policy checks
+        run  : |
+          if [[ -d "guard-rules" ]]; then
+            echo "=== Running cfn-guard policy checks ==="
+            # TODO: Install cfn-guard and run against templates
+            echo "ℹ️  cfn-guard placeholder — add rules to guard-rules/"
+          else
+            echo "ℹ️  No guard-rules/ directory — skipping policy checks"
+          fi
+
+      # --- Security Scan (blocking on PR) ---
+      - name : Trivy scan (informational)
+        uses : aquasecurity/trivy-action@v0.36.0
+        with :
+          exit-code   : 0
+          trivyignores: .trivyignore.yml
+          scan-ref    : cloudformation-templates
+          scan-type   : config
+          severity    : MEDIUM,HIGH,CRITICAL
+
+      - name : Trivy scan (blocking)
+        uses : aquasecurity/trivy-action@v0.36.0
+        with :
+          exit-code   : 1
+          trivyignores: .trivyignore.yml
+          scan-ref    : cloudformation-templates
+          scan-type   : config
+          severity    : MEDIUM,HIGH,CRITICAL
+
+      # --- Tag Validation ---
+      - name : Validate tag presence (placeholder)
+        run  : |
+          echo "=== Tag validation ==="
+          echo "✓ All templates have required tags (mock)"
+
+  # ===========================================================================
+  # Unit Tests
+  # ===========================================================================
+  # Runs pytest on support scripts. Validates Python logic independently
+  # from config validation. Add new tests here as scripts evolve.
+  #
+  # Tests live in: support-scripts/pyscripts/tests/
+  # ===========================================================================
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Set up Python
+        uses : actions/setup-python@v5
+        with :
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache         : pip
+          cache-dependency-path: support-scripts/pyscripts/requirements.txt
+
+      - name : Install dependencies
+        run  : |
+          pip install --quiet \
+            -r support-scripts/pyscripts/requirements.txt \
+            pytest \
+            hypothesis
+
+      - name : Run unit tests
+        run  : |
+          cd support-scripts/pyscripts
+          python -m pytest tests/ -v --tb=short
+
+  # ===========================================================================
+  # Config Validation (LZA Validator)
+  # ===========================================================================
+  # Fetches config from prd DDB and validates against LZA schema.
+  # This is the equivalent of "cdk synth" — catches config schema errors.
+  # ===========================================================================
+  config-validation:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Fetch LZA config
+        uses : ./.github/actions/fetch-config
+        with :
+          environment: prd
+
+      - name : Validate LZA config
+        uses : ./.github/actions/validate-config
+        with :
+          environment: prd
+          create-zip : "false"
+
+  # ===========================================================================
+  # SonarQube (Code Quality)
+  # ===========================================================================
+  # Runs SonarQube analysis on Python support scripts.
+  # Requires SONAR_TOKEN secret to be configured.
+  # ===========================================================================
+  sonar:
+    runs-on: ubuntu-latest
+    # if: vars.SONAR_ENABLED == 'true'
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name : SonarQube scan (placeholder)
+        run  : |
+          echo "=== SonarQube scan ==="
+          echo "ℹ️  Configure SONAR_TOKEN secret and sonar-project.properties to enable"
+          echo "    In production:"
+          echo "    uses: SonarSource/sonarqube-scan-action@v5"
+          echo "    env:"
+          echo "      SONAR_TOKEN: \${{ secrets.SONAR_TOKEN }}"
+
+  # ===========================================================================
+  # Snyk IaC (Optional - Security)
+  # ===========================================================================
+  # Runs Snyk Infrastructure-as-Code scan for security findings.
+  # Requires SNYK_TOKEN secret to be configured.
+  # ===========================================================================
+  snyk:
+    runs-on: ubuntu-latest
+    # if: vars.SNYK_ENABLED == 'true'
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name : Snyk IaC scan (placeholder)
+        run  : |
+          echo "=== Snyk IaC scan ==="
+          echo "ℹ️  Configure SNYK_TOKEN secret to enable"
+          echo "    In production:"
+          echo "    uses: snyk/actions/iac@master"
+          echo "    env:"
+          echo "      SNYK_TOKEN: \${{ secrets.SNYK_TOKEN }}"

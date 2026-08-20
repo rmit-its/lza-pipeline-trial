@@ -1,0 +1,19 @@
+# =============================================================================
+# CFN Guard Rule: Mandatory Tags
+#
+# Validates that all taggable resources include RMIT mandatory tags.
+# Add more rules as .guard files in this directory.
+#
+# Run locally: cfn-guard validate -d cloudformation-templates/ -r guard-rules/
+# Docs: https://docs.aws.amazon.com/cfn-guard/latest/ug/what-is-guard.html
+# =============================================================================
+
+# Rule: S3 Buckets must have rmit:fo:application tag
+rule s3_must_have_application_tag when resourceType == "AWS::S3::Bucket" {
+  Properties.Tags[*].Key == "rmit:fo:application"
+}
+
+# Rule: S3 Buckets must have rmit:fo:environment tag
+rule s3_must_have_environment_tag when resourceType == "AWS::S3::Bucket" {
+  Properties.Tags[*].Key == "rmit:fo:environment"
+}

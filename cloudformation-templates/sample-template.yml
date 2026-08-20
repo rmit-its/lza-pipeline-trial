@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Sample CloudFormation template for pipeline trial
+
+Resources:
+  rSampleBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "lza-trial-${AWS::AccountId}"
+      Tags:
+        - Key: rmit:fo:application
+          Value: lza-pipeline-trial
+        - Key: rmit:fo:environment
+          Value: dev

@@ -1,0 +1,64 @@
+name: Validate LZA Config
+description: Download config artifact, run LZA validator, optionally zip for deploy
+
+inputs:
+  environment:
+    description: Target environment (dev, uat, prd)
+    required: true
+  create-zip:
+    description: Whether to create and upload the config zip (true/false)
+    required: false
+    default: "false"
+  aws-role-arn:
+    description: OIDC role ARN for validator (empty to skip)
+    required: false
+    default: ""
+  aws-region:
+    description: AWS region
+    required: false
+    default: ap-southeast-2
+
+runs:
+  using: composite
+  steps:
+
+    # --- OIDC assume role (skipped if no role provided) ---
+    # - name: Configure AWS credentials
+    #   if: inputs.aws-role-arn != ''
+    #   uses: aws-actions/configure-aws-credentials@v6
+    #   with:
+    #     aws-region: ${{ inputs.aws-region }}
+    #     role-to-assume: ${{ inputs.aws-role-arn }}
+
+    - name : Download config artifact
+      uses : actions/download-artifact@v4
+      with :
+        name: lza-config-${{ inputs.environment }}-${{ github.run_id }}
+        path: config/
+
+    - name : Apply config to workspace
+      shell: bash
+      run  : |
+        cp config/network-config.yaml        network-config.yaml 2>/dev/null || true
+        cp config/accounts-config.yaml       accounts-config.yaml 2>/dev/null || true
+        cp config/iam-config.yaml            iam-config.yaml 2>/dev/null || true
+        cp config/customizations-config.yaml customizations-config.yaml 2>/dev/null || true
+
+    - name : Validate LZA config
+      shell: bash
+      run  : ./support-scripts/pyscripts/mock-validate-config.sh
+
+    - name : Create config zip
+      if   : inputs.create-zip == 'true'
+      shell: bash
+      run  : |
+        zip -9rv /tmp/aws-accelerator-config.zip . -x '.git/*'
+        cp /tmp/aws-accelerator-config.zip ./aws-accelerator-config.zip
+
+    - name : Upload config zip artifact
+      if   : inputs.create-zip == 'true'
+      uses : actions/upload-artifact@v4
+      with :
+        name          : aws-accelerator-config-${{ inputs.environment }}-${{ github.run_id }}
+        path          : aws-accelerator-config.zip
+        retention-days: 1

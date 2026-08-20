@@ -1,0 +1,103 @@
+name    : CI - Push Checks
+run-name: CI - Push - ${{ github.ref_name }}
+
+# =============================================================================
+# Fast Feedback on Every Push
+#
+# Triggers:
+#   push to any branch (except main — main is handled by lza-deploy.yml)
+#
+# Runs lightweight static checks that complete in < 30 seconds.
+# Gives developers immediate "is my YAML valid?" feedback without
+# waiting for a full PR validation cycle.
+#
+# Checks:
+#   - yamllint (pure YAML syntax — catches indent/structure errors)
+#   - cfn-lint (CloudFormation syntax + property validation)
+#   - cfn-guard (policy-as-code — tags, naming, allowed resources)
+#   - Trivy (security misconfigurations)
+# =============================================================================
+
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - 'cloudformation-templates/**'
+      - 'support-scripts/**'
+      - '*.yaml'
+      - '*.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  cancel-in-progress: true
+  group: ci-push-${{ github.ref }}
+
+jobs:
+
+  # ===========================================================================
+  # Lint & Scan (single fast job)
+  # ===========================================================================
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- YAML Lint ---
+      - name : Install yamllint
+        run  : pip install --quiet yamllint
+
+      - name : Validate YAML syntax
+        run  : |
+          echo "=== Checking YAML syntax ==="
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" \
+            cloudformation-templates/ \
+            || true
+          echo "✓ YAML lint complete"
+
+      # --- CFN Lint ---
+      - name : Install cfn-lint
+        run  : pip install --quiet cfn-lint
+
+      - name : Lint CloudFormation templates
+        run  : |
+          TEMPLATES=$( find cloudformation-templates -type f \( -name '*.yml' -o -name '*.yaml' \) \
+                       | xargs grep -l AWSTemplateFormatVersion 2>/dev/null || true )
+          if [[ -n "$TEMPLATES" ]]; then
+            cfn-lint --format pretty --non-zero-exit-code error $TEMPLATES
+          else
+            echo "No CloudFormation templates found — skipping cfn-lint"
+          fi
+
+      # --- CFN Guard (policy-as-code) ---
+      - name : Install cfn-guard
+        run  : |
+          curl -fsSL https://github.com/aws-cloudformation/cloudformation-guard/releases/latest/download/cfn-guard-v3-ubuntu-latest.tar.gz \
+            | tar -xz -C /usr/local/bin 2>/dev/null || echo "cfn-guard install skipped (placeholder)"
+
+      - name : Run cfn-guard policy checks
+        run  : |
+          if [[ -d "guard-rules" ]] && command -v cfn-guard &>/dev/null; then
+            echo "=== Running cfn-guard policy checks ==="
+            find cloudformation-templates -type f \( -name '*.yml' -o -name '*.yaml' \) \
+              | xargs grep -l AWSTemplateFormatVersion \
+              | while read tpl; do
+                  cfn-guard validate -d "$tpl" -r guard-rules/ --show-summary all || true
+                done
+          else
+            echo "ℹ️  cfn-guard rules not configured yet — skipping"
+            echo "   Add rules to guard-rules/ directory to enable policy checks"
+          fi
+
+      # --- Security Scan ---
+      - name : Trivy scan (informational)
+        uses : aquasecurity/trivy-action@v0.36.0
+        with :
+          exit-code   : 0
+          trivyignores: .trivyignore.yml
+          scan-ref    : cloudformation-templates
+          scan-type   : config
+          severity    : MEDIUM,HIGH,CRITICAL

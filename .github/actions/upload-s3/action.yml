@@ -1,0 +1,40 @@
+name: Upload Config to S3
+description: Download config zip and upload to S3 for LZA CodePipeline
+
+inputs:
+  environment:
+    description: Target environment (dev, uat, prd)
+    required: true
+  aws-role-arn:
+    description: OIDC role ARN for S3 upload (empty to skip)
+    required: false
+    default: ""
+  aws-region:
+    description: AWS region
+    required: false
+    default: ap-southeast-2
+  s3-bucket-path:
+    description: Full S3 path for the config zip
+    required: false
+    default: s3://aws-accelerator-config-585008077316-ap-southeast-2/zipped/aws-accelerator-config.zip
+
+runs:
+  using: composite
+  steps:
+
+    - name : Download config zip
+      uses : actions/download-artifact@v4
+      with :
+        name: aws-accelerator-config-${{ inputs.environment }}-${{ github.run_id }}
+
+    # --- OIDC assume role (skipped if no role provided) ---
+    # - name: Configure AWS credentials
+    #   if: inputs.aws-role-arn != ''
+    #   uses: aws-actions/configure-aws-credentials@v6
+    #   with:
+    #     aws-region: ${{ inputs.aws-region }}
+    #     role-to-assume: ${{ inputs.aws-role-arn }}
+
+    - name : Upload config to S3
+      shell: bash
+      run  : ./support-scripts/pyscripts/mock-upload-s3.sh ${{ inputs.environment }}

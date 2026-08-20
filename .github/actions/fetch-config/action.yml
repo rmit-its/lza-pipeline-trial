@@ -1,0 +1,38 @@
+name: Fetch LZA Config
+description: Fetch LZA config from DynamoDB and upload as artifact
+
+inputs:
+  environment:
+    description: Target environment (dev, uat, prd)
+    required: true
+  aws-role-arn:
+    description: OIDC role ARN for DDB access (empty to skip)
+    required: false
+    default: ""
+  aws-region:
+    description: AWS region
+    required: false
+    default: ap-southeast-2
+
+runs:
+  using: composite
+  steps:
+
+    # --- OIDC assume role (skipped if no role provided) ---
+    # - name: Configure AWS credentials
+    #   if: inputs.aws-role-arn != ''
+    #   uses: aws-actions/configure-aws-credentials@v6
+    #   with:
+    #     aws-region: ${{ inputs.aws-region }}
+    #     role-to-assume: ${{ inputs.aws-role-arn }}
+
+    - name : Fetch LZA config from ${{ inputs.environment }} DynamoDB
+      shell: bash
+      run  : ./support-scripts/pyscripts/mock-fetch-config.sh ${{ inputs.environment }}
+
+    - name : Upload config artifact
+      uses : actions/upload-artifact@v4
+      with :
+        name          : lza-config-${{ inputs.environment }}-${{ github.run_id }}
+        path          : config/
+        retention-days: 1
