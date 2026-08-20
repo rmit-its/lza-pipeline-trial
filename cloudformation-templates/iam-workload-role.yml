@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: IAM role for workload deployment via GitHub OIDC
+
+Parameters:
+  pEnvironment:
+    Type: String
+    AllowedValues: [dev, uat, prd]
+  pGitHubOrg:
+    Type: String
+    Default: rmit-its
+  pGitHubRepo:
+    Type: String
+
+Resources:
+  rWorkloadDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${pGitHubRepo}-deploy-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${pGitHubOrg}/${pGitHubRepo}:*"
+      Tags:
+        - Key: rmit:fo:application
+          Value: !Ref pGitHubRepo
+        - Key: rmit:fo:environment
+          Value: !Ref pEnvironment
+        - Key: rmit:technical:managed-by
+          Value: uelz-lza-config
