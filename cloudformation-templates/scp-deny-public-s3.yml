@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: SCP to deny public S3 bucket access across all workload accounts
+
+Resources:
+  rDenyPublicS3Policy:
+    Type: AWS::Organizations::Policy
+    Properties:
+      Name: deny-public-s3-access
+      Description: Prevents S3 buckets from being made public in workload accounts
+      Type: SERVICE_CONTROL_POLICY
+      TargetIds:
+        - ou-workloads
+      Content:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyPublicS3
+            Effect: Deny
+            Action:
+              - s3:PutBucketPublicAccessBlock
+              - s3:PutAccountPublicAccessBlock
+            Resource: "*"
+            Condition:
+              StringNotEquals:
+                aws:PrincipalOrgID: o-rmituelz
+      Tags:
+        - Key: rmit:fo:application
+          Value: landing-zone
+        - Key: rmit:fo:environment
+          Value: prd
+        - Key: rmit:technical:managed-by
+          Value: uelz-lza-config
