@@ -172,7 +172,7 @@
         <div class="item">
           <span class="position">${i + 1}</span>
           <div class="content">
-            <div class="title"><a href="${r.htmlUrl}" target="_blank">${r.displayTitle}</a></div>
+            <div class="title"><a href="${r.url}" target="_blank">${r.displayTitle}</a></div>
             <div class="meta">${timeAgo(r.createdAt)} · ${r.headBranch || ''}</div>
           </div>
           ${badge(r.conclusion, r.status)}
@@ -193,7 +193,7 @@
         <div class="item">
           <div class="icon">${icon}</div>
           <div class="content">
-            <div class="title"><a href="${r.htmlUrl}" target="_blank">${r.displayTitle}</a></div>
+            <div class="title"><a href="${r.url}" target="_blank">${r.displayTitle}</a></div>
             <div class="meta">${r.name} · ${timeAgo(r.createdAt)}</div>
           </div>
           ${badge(null, 'in_progress')}
@@ -253,8 +253,8 @@
         <div class="item">
           <div class="icon">${icon}</div>
           <div class="content">
-            <div class="title"><a href="${r.htmlUrl}" target="_blank">${r.displayTitle}</a></div>
-            <div class="meta">${new Date(r.createdAt).toLocaleString()} · #${r.runNumber || ''}</div>
+            <div class="title"><a href="${r.url}" target="_blank">${r.displayTitle}</a></div>
+            <div class="meta">${new Date(r.createdAt).toLocaleString()} · #${r.number || ''}</div>
           </div>
           ${badge(r.conclusion, r.status)}
         </div>`;
