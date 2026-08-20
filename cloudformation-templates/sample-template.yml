@@ -11,3 +11,5 @@ Resources:
           Value: lza-pipeline-trial
         - Key: rmit:fo:environment
           Value: dev
+        - Key: rmit:fo:cost-centre
+          Value: CC-12345
