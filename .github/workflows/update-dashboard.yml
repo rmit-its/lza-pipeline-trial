@@ -39,19 +39,19 @@ jobs:
             > docs/prs.json
 
           # Fetch recent deploy runs
-          gh run list --repo rmit-its/lza-pipeline-trial --workflow "LZA Deploy" --limit 10 --json databaseId,displayTitle,conclusion,status,createdAt,runNumber,htmlUrl \
+          gh run list --repo rmit-its/lza-pipeline-trial --workflow "LZA Deploy" --limit 10 --json databaseId,displayTitle,conclusion,status,createdAt,number,url \
             > docs/deploys.json
 
           # Fetch onboarding runs
-          gh run list --repo rmit-its/lza-pipeline-trial --workflow "LZA Onboard" --limit 15 --json databaseId,displayTitle,conclusion,status,createdAt,htmlUrl \
+          gh run list --repo rmit-its/lza-pipeline-trial --workflow "LZA Onboard" --limit 15 --json databaseId,displayTitle,conclusion,status,createdAt,url \
             > docs/onboard.json
 
           # Fetch currently running workflows
-          gh run list --repo rmit-its/lza-pipeline-trial --status in_progress --json databaseId,displayTitle,name,status,createdAt,event,htmlUrl \
+          gh run list --repo rmit-its/lza-pipeline-trial --status in_progress --json databaseId,displayTitle,name,status,createdAt,event,url \
             > docs/executing.json
 
           # Fetch merge group runs (queue entries)
-          gh run list --repo rmit-its/lza-pipeline-trial --event merge_group --limit 10 --json databaseId,displayTitle,conclusion,status,createdAt,headBranch,htmlUrl \
+          gh run list --repo rmit-its/lza-pipeline-trial --event merge_group --limit 10 --json databaseId,displayTitle,conclusion,status,createdAt,headBranch,url \
             > docs/queue.json
 
           # Write timestamp
