@@ -1,2 +1,7 @@
 # Trivy findings to ignore
 # Format: AVD-ID or CVE-ID
+
+# Trial repo - sample template doesn't need CMK encryption
+- id: AVD-AWS-0132
+  paths:
+    - cloudformation-templates/sample-template.yml
