@@ -4,7 +4,7 @@
 set -euo pipefail
 
 echo "=== Mock: Validating LZA config ==="
-sleep 3
+sleep 90
 echo "✓ network-config.yaml: valid"
 echo "✓ accounts-config.yaml: valid"
 echo "✓ iam-config.yaml: valid"
